@@ -1,0 +1,6 @@
+{
+    "sketch": "src\\OTALeds.ino",
+    "port": "192.168.0.10:8266",
+    "board": "esp8266:esp8266:nodemcuv2",
+    "configuration": "CpuFrequency=80,UploadSpeed=115200,FlashSize=4M3M"
+}
