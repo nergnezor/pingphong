@@ -6,7 +6,7 @@
             "request": "launch",
             "cwd": "${workspaceRoot}",
             "name": "PlatformIO Debugger",
-            "target": "c:/Users/erikr/Documents/Arduino/generated_examples/OTALeds/.pioenvs/nodemcuv2/firmware.elf",
+            "target": "c:/projekt/pingphong/.pioenvs/nodemcuv2/firmware.elf",
             "gdbpath": "C:/Users/erikr/.platformio/penv/Scripts/piodebuggdb",
             "autorun": [ "source .pioinit" ]
         }
