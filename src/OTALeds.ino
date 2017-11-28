@@ -79,6 +79,9 @@ void getBulbs()
     Serial.println(y);
     Serial.println(r);
     Serial.println(phi);
+    while (phi > 2 * M_PI){
+      phi -= 2 * M_PI;
+    }
     bulbs[ledIndexes[i]] = {y, r, phi, ledIndexes[i]};
     // var bulb = new Bulb(y, r, phi);
     // 		console.log('phi: ' + (phi/(2* Math.PI)) + ', real phi: ' + phi + ', r: ' + r+ ', y: ' + y);
@@ -166,34 +169,22 @@ void setup()
 }
 
 uint8 counter = 0;
-float yLoc = 0;
+float yLoc = 0.01;
 void loop()
 {
   ArduinoOTA.handle();
-  auto palette = CHSVPalette16();
   // Serial.println("fastLED: White");
   // leds[0] = CRGB::White;
   for (int i = 0; i < NUM_LEDS; ++i)
   {
-    if (i & (0x0f & counter))
-    {
-      // continue;
-    }
-    // uint8 hue = (255 * i) / NUM_LEDS;
-    uint8 hue = 127 * (1 + bulbs[i].y);
-    uint8 sat = 255 - bulbs[i].phi;
-    uint8 val = 100 * bulbs[i].r;
-    // Serial.println(hue);
+    // uint8 hue = 127 * ((1 + bulbs[i].y) - yLoc);
 
-    // CHSV color = CHSV(hue, 255, 2 * std::max(0, 127 - (hue + counter)));
-    // CHSV color = CHSV(hue, 255, 2 * std::max(0, 127 - (hue + counter)));
-    // color.hue += counter;
-    // color.value += counter;
-    // leds[i].setHue(hue);
-    leds[i] = CHSV(hue, sat, val);
-    // leds[i] = color;
+    // leds[i] = CHSV(hue, 255, 30);
+    // leds[i] = CHSV(i*4, 255, 30);
+    leds[i] = CHSV((255 * bulbs[i].phi) / (2*M_PI) , 255, 30);
   }
   FastLED.show();
-  delay(10);
+  delay(20);
   ++counter;
+  yLoc += 0.005;
 }
