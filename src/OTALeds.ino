@@ -30,12 +30,17 @@
 #include <ESP8266mDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#include <ArduinoJson.h>
 #include <math.h>
 #include <SPI.h> //SPI
 #define FASTLED_ESP8266_RAW_PIN_ORDER
 // #define FASTLED_ESP8266_NODEMCU_PIN_ORDER
 // #define FASTLED_ESP8266_D1_PIN_ORDER
 #include "FastLED.h"
+
+#define Abs(a) ((a) < 0 ? -(a) : (a))
+#define Max(a, b) ((a) > (b) ? (a) : (b))
+
 #define NUM_LEDS 50
 typedef struct Bulb
 {
@@ -79,7 +84,8 @@ void getBulbs()
     Serial.println(y);
     Serial.println(r);
     Serial.println(phi);
-    while (phi > 2 * M_PI){
+    while (phi > 2 * M_PI)
+    {
       phi -= 2 * M_PI;
     }
     bulbs[ledIndexes[i]] = {y, r, phi, ledIndexes[i]};
@@ -90,6 +96,69 @@ void getBulbs()
   }
 }
 
+int counter = 0;
+float yLoc = 0.01;
+Bulb Eye_target;
+int Eye(Bulb *target = &Eye_target)
+{
+  int closestIndex = -1;
+  uint minDist = UINT32_MAX;
+  for (int i = 0; i < NUM_LEDS; ++i)
+  {
+    Bulb *other = &bulbs[i];
+    auto dPhi = Abs(target->phi - other->phi);
+    auto dx = dPhi / M_PI;
+    dx = MIN(dx, 2 - dx);                    // max 1.0
+    auto dy = Abs(target->y - other->y) / 2; // max 1.0
+    dx *= 256;
+    dy *= 256;
+    int distance = sqrt16((dx * dx + dy * dy) / 2);
+    if (distance < minDist && distance > 0)
+    {
+      minDist = distance;
+      closestIndex = i;
+    }
+    int val = 7 * rgb2hsv_approximate(leds[i]).hue;
+    val += Max(0, 100 - distance);
+    val /= 8;
+    // leds[i] = CHSV(distance, 255, (uint8)(-val) / 4);
+    leds[i] = CHSV(255 - distance / 2, MIN(255, distance * 2), (Max(0, 60 - distance / 4)));
+    //   if (!distance)
+    //   {
+    //     leds[i] = CHSV(0, 0, 0);
+    //   }
+    //   else if (distance < 60)
+    //   {
+    //     leds[i] = CHSV(0, 0, 0 + distance);
+    //   }
+    //   else
+    //   {
+    //     // leds[i] = CHSV(30, 0, Max(0, 255 - distance + 60));
+    //     leds[i] = CHSV(30, 0, 255);
+    //   }
+  }
+  return minDist;
+  // if (closestIndex != 0)
+  // {
+  //   leds[closestIndex] = CHSV(0, 0, 0);
+  // }
+}
+
+void Rain()
+{
+}
+
+void VerticalRainbow()
+{
+  for (int i = 0; i < NUM_LEDS; ++i)
+  {
+    // uint8 hue = 127 * ((1 + bulbs[i].y) - yLoc);
+
+    // leds[i] = CHSV(hue, 255, 30);
+    // leds[i] = CHSV(i*4, 255, 30);
+    leds[i] = CHSV((255 * bulbs[i].phi) / (2 * M_PI), 255, 30);
+  }
+}
 void setup()
 {
   Serial.begin(115200);
@@ -161,30 +230,53 @@ void setup()
   getBulbs();
   Serial.println("Starting fastLED");
   FastLED.addLeds<WS2801, 13, 14>(leds, NUM_LEDS);
-  // for (int i = 0; i < NUM_LEDS; ++i)
-  // {
-  //   uint8 hue = 127 * (1 + bulbs[i].y);
-  //   leds[i] = CHSV(hue, 255, 255);
-  // }
-}
 
-uint8 counter = 0;
-float yLoc = 0.01;
+  Eye();
+  FastLED.show();
+}
+int limit = 0;
 void loop()
 {
   ArduinoOTA.handle();
   // Serial.println("fastLED: White");
   // leds[0] = CRGB::White;
-  for (int i = 0; i < NUM_LEDS; ++i)
-  {
-    // uint8 hue = 127 * ((1 + bulbs[i].y) - yLoc);
+  // Eye_target.phi += 0.002;
+  // if (Eye_target.phi > 2 * M_PI){
+  //   Eye_target.phi -= 2 * M_PI;
+  // }
 
-    // leds[i] = CHSV(hue, 255, 30);
-    // leds[i] = CHSV(i*4, 255, 30);
-    leds[i] = CHSV((255 * bulbs[i].phi) / (2*M_PI) , 255, 30);
-  }
-  FastLED.show();
-  delay(20);
   ++counter;
-  yLoc += 0.005;
+  if (counter > limit)
+  {
+    limit = 2 * random8();
+    counter = 0;
+    Eye_target.index += random8(0, NUM_LEDS);
+    // Eye_target.index -= random8(0, 16);
+    Eye_target.index %= NUM_LEDS - 1;
+    // if (Eye_target.index >= NUM_LEDS)
+    // {
+    //   Eye_target.index = 25;
+    // }
+    // if (Eye_target.index < 0)
+    // {
+    //   Eye_target.index = 25;
+    // }
+  }
+
+  Eye_target.phi = (bulbs[Eye_target.index].phi + 31 * Eye_target.phi) / 32;
+  Eye_target.y = (bulbs[Eye_target.index].y + 31 * Eye_target.y) / 32;
+  // if (Eye_target.y > 1)
+  // {
+  //   Eye_target.y = 1;
+  // }
+  // if (Eye_target.y < 0)
+  // {
+  //   Eye_target.y = 0;
+  // }
+  if (Eye() > 0)
+  {
+    FastLED.show();
+  }
+  // yLoc += 0.005;
+  delay(10);
 }
