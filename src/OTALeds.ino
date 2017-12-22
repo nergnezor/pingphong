@@ -41,14 +41,31 @@
 #define Abs(a) ((a) < 0 ? -(a) : (a))
 #define Max(a, b) ((a) > (b) ? (a) : (b))
 
-#define NUM_LEDS 50
-typedef struct Bulb
+enum Axis
 {
-  float y;
-  float r;
-  float phi;
+  X,
+  Y,
+  Z,
+  R,
+  PHI
+};
+
+#define NUM_LEDS 50
+struct Bulb
+{
+  union {
+    float axisValue[5];
+    struct
+    {
+      float x;
+      float y;
+      float z;
+      float r;
+      float phi;
+    };
+  } location;
   uint8 index;
-} Bulb;
+};
 CRGB leds[NUM_LEDS];
 Bulb bulbs[NUM_LEDS];
 
@@ -71,6 +88,18 @@ uint8 ledIndexes[] = {34, 4, 38, 5, 20,
                       13, 31, 7, 2, 36, //40
                       23, 42, 26, 18, 47,
                       17, 24, 41, 8, 25};
+
+float getDistance(Bulb *b1, Bulb *b2)
+{
+  float sum = 0;
+  for (int axis = X; axis <= Z; ++axis)
+  {
+    sum += pow(Abs(b1->location.axisValue[axis] - b2->location.axisValue[axis]), 2);
+  }
+  float r = sqrt(sum);
+  return r;
+}
+
 void getBulbs()
 {
   float offset = 2. / NUM_LEDS;
@@ -80,24 +109,28 @@ void getBulbs()
     float y = ((i * offset) - 1) + (offset / 2);
     float r = sqrt(1 - pow(y, 2));
     float phi = (i % NUM_LEDS) * increment;
-    Serial.println("bulb:");
-    Serial.println(y);
-    Serial.println(r);
-    Serial.println(phi);
     while (phi > 2 * M_PI)
     {
       phi -= 2 * M_PI;
     }
-    bulbs[ledIndexes[i]] = {y, r, phi, ledIndexes[i]};
-    // var bulb = new Bulb(y, r, phi);
-    // 		console.log('phi: ' + (phi/(2* Math.PI)) + ', real phi: ' + phi + ', r: ' + r+ ', y: ' + y);
-    // bulbs[ledIndexes[i]] = bulb
-    //  scene.add(bulb.model);
+    uint8 theta = UINT8_MAX * phi / (2 * M_PI);
+    bulbs[ledIndexes[i]] = {
+        {
+            cos8(theta) / (float)UINT8_MAX * r,
+            (y + 1) / 2,
+            sin8(theta) / (float)UINT8_MAX * r,
+            r,
+            phi,
+        },
+        ledIndexes[i]};
+    Serial.println(bulbs[ledIndexes[i]].location.x);
+    Serial.println(bulbs[ledIndexes[i]].location.y);
+    Serial.println(bulbs[ledIndexes[i]].location.z);
   }
 }
 
 int counter = 0;
-float yLoc = 0.01;
+float yLoc = 0.0001;
 Bulb Eye_target;
 int Eye(Bulb *target = &Eye_target)
 {
@@ -105,43 +138,10 @@ int Eye(Bulb *target = &Eye_target)
   uint minDist = UINT32_MAX;
   for (int i = 0; i < NUM_LEDS; ++i)
   {
-    Bulb *other = &bulbs[i];
-    auto dPhi = Abs(target->phi - other->phi);
-    auto dx = dPhi / M_PI;
-    dx = MIN(dx, 2 - dx);                    // max 1.0
-    auto dy = Abs(target->y - other->y) / 2; // max 1.0
-    dx *= 256;
-    dy *= 256;
-    int distance = sqrt16((dx * dx + dy * dy) / 2);
-    if (distance < minDist && distance > 0)
-    {
-      minDist = distance;
-      closestIndex = i;
-    }
-    int val = 7 * rgb2hsv_approximate(leds[i]).hue;
-    val += Max(0, 100 - distance);
-    val /= 8;
-    // leds[i] = CHSV(distance, 255, (uint8)(-val) / 4);
-    leds[i] = CHSV(255 - distance / 2, MIN(255, distance * 2), (Max(0, 60 - distance / 4)));
-    //   if (!distance)
-    //   {
-    //     leds[i] = CHSV(0, 0, 0);
-    //   }
-    //   else if (distance < 60)
-    //   {
-    //     leds[i] = CHSV(0, 0, 0 + distance);
-    //   }
-    //   else
-    //   {
-    //     // leds[i] = CHSV(30, 0, Max(0, 255 - distance + 60));
-    //     leds[i] = CHSV(30, 0, 255);
-    //   }
+    float distance = MIN(1, getDistance(target, &bulbs[i]));
+    leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 100 - 120 * distance));
   }
   return minDist;
-  // if (closestIndex != 0)
-  // {
-  //   leds[closestIndex] = CHSV(0, 0, 0);
-  // }
 }
 
 void Rain()
@@ -156,7 +156,7 @@ void VerticalRainbow()
 
     // leds[i] = CHSV(hue, 255, 30);
     // leds[i] = CHSV(i*4, 255, 30);
-    leds[i] = CHSV((255 * bulbs[i].phi) / (2 * M_PI), 255, 30);
+    leds[i] = CHSV((255 * bulbs[i].location.phi) / (2 * M_PI), 255, 30);
   }
 }
 void setup()
@@ -230,7 +230,8 @@ void setup()
   getBulbs();
   Serial.println("Starting fastLED");
   FastLED.addLeds<WS2801, 13, 14>(leds, NUM_LEDS);
-
+  Eye_target.location.r = 1;
+  Eye_target.location.y = 0.5;
   Eye();
   FastLED.show();
 }
@@ -238,45 +239,23 @@ int limit = 0;
 void loop()
 {
   ArduinoOTA.handle();
-  // Serial.println("fastLED: White");
-  // leds[0] = CRGB::White;
-  // Eye_target.phi += 0.002;
-  // if (Eye_target.phi > 2 * M_PI){
-  //   Eye_target.phi -= 2 * M_PI;
-  // }
 
-  ++counter;
-  if (counter > limit)
+  Eye_target.location.phi += 0.01;
+  // Eye_target.location.r += 0.001;
+  if (Eye_target.location.r > 1.2)
   {
-    limit = 2 * random8();
-    counter = 0;
-    Eye_target.index += random8(0, NUM_LEDS);
-    // Eye_target.index -= random8(0, 16);
-    Eye_target.index %= NUM_LEDS - 1;
-    // if (Eye_target.index >= NUM_LEDS)
-    // {
-    //   Eye_target.index = 25;
-    // }
-    // if (Eye_target.index < 0)
-    // {
-    //   Eye_target.index = 25;
-    // }
+    Eye_target.location.r = 0;
   }
+  if (Eye_target.location.phi > 2 * M_PI)
+  {
+    Eye_target.location.phi -= 2 * M_PI;
+  }
+  uint8 theta = UINT8_MAX * Eye_target.location.phi / (2 * M_PI);
+  Eye_target.location.x = (cos8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
+  Eye_target.location.z = (sin8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
 
-  Eye_target.phi = (bulbs[Eye_target.index].phi + 31 * Eye_target.phi) / 32;
-  Eye_target.y = (bulbs[Eye_target.index].y + 31 * Eye_target.y) / 32;
-  // if (Eye_target.y > 1)
-  // {
-  //   Eye_target.y = 1;
-  // }
-  // if (Eye_target.y < 0)
-  // {
-  //   Eye_target.y = 0;
-  // }
-  if (Eye() > 0)
-  {
-    FastLED.show();
-  }
-  // yLoc += 0.005;
+
+  Eye();
+  FastLED.show();
   delay(10);
 }
