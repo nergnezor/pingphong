@@ -38,34 +38,8 @@
 // #define FASTLED_ESP8266_D1_PIN_ORDER
 #include "FastLED.h"
 
-#define Abs(a) ((a) < 0 ? -(a) : (a))
-#define Max(a, b) ((a) > (b) ? (a) : (b))
+#include "geometry.h"
 
-enum Axis
-{
-  X,
-  Y,
-  Z,
-  R,
-  PHI
-};
-
-#define NUM_LEDS 50
-struct Bulb
-{
-  union {
-    float axisValue[5];
-    struct
-    {
-      float x;
-      float y;
-      float z;
-      float r;
-      float phi;
-    };
-  } location;
-  uint8 index;
-};
 CRGB leds[NUM_LEDS];
 Bulb bulbs[NUM_LEDS];
 
@@ -78,87 +52,6 @@ const char *host = "OTA-LEDS";
 int led_pin = ESP8266_LED;
 #define N_DIMMERS 0
 int dimmer_pin[] = {14, 5, 15};
-uint8 ledIndexes[] = {34, 4, 38, 5, 20,
-                      28, 11, 33, 45, 14, //10
-                      44, 15, 1, 39, 21,
-                      32, 27, 10, 49, 6, //20
-                      43, 35, 3, 37, 22,
-                      19, 29, 16, 48, 40, //30
-                      0, 30, 12, 9, 46,
-                      13, 31, 7, 2, 36, //40
-                      23, 42, 26, 18, 47,
-                      17, 24, 41, 8, 25};
-
-float getDistance(Bulb *b1, Bulb *b2)
-{
-  float sum = 0;
-  for (int axis = X; axis <= Z; ++axis)
-  {
-    sum += pow(Abs(b1->location.axisValue[axis] - b2->location.axisValue[axis]), 2);
-  }
-  float r = sqrt(sum);
-  return r;
-}
-
-void getBulbs()
-{
-  float offset = 2. / NUM_LEDS;
-  float increment = M_PI * (3. - sqrt(5.));
-  for (int i = 0; i < NUM_LEDS; ++i)
-  {
-    float y = ((i * offset) - 1) + (offset / 2);
-    float r = sqrt(1 - pow(y, 2));
-    float phi = (i % NUM_LEDS) * increment;
-    while (phi > 2 * M_PI)
-    {
-      phi -= 2 * M_PI;
-    }
-    uint8 theta = UINT8_MAX * phi / (2 * M_PI);
-    bulbs[ledIndexes[i]] = {
-        {
-            cos8(theta) / (float)UINT8_MAX * r,
-            (y + 1) / 2,
-            sin8(theta) / (float)UINT8_MAX * r,
-            r,
-            phi,
-        },
-        ledIndexes[i]};
-    Serial.println(bulbs[ledIndexes[i]].location.x);
-    Serial.println(bulbs[ledIndexes[i]].location.y);
-    Serial.println(bulbs[ledIndexes[i]].location.z);
-  }
-}
-
-int counter = 0;
-float yLoc = 0.0001;
-Bulb Eye_target;
-int Eye(Bulb *target = &Eye_target)
-{
-  int closestIndex = -1;
-  uint minDist = UINT32_MAX;
-  for (int i = 0; i < NUM_LEDS; ++i)
-  {
-    float distance = MIN(1, getDistance(target, &bulbs[i]));
-    leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 100 - 120 * distance));
-  }
-  return minDist;
-}
-
-void Rain()
-{
-}
-
-void VerticalRainbow()
-{
-  for (int i = 0; i < NUM_LEDS; ++i)
-  {
-    // uint8 hue = 127 * ((1 + bulbs[i].y) - yLoc);
-
-    // leds[i] = CHSV(hue, 255, 30);
-    // leds[i] = CHSV(i*4, 255, 30);
-    leds[i] = CHSV((255 * bulbs[i].location.phi) / (2 * M_PI), 255, 30);
-  }
-}
 void setup()
 {
   Serial.begin(115200);
@@ -227,35 +120,173 @@ void setup()
     SPI.transfer(buf[1]);
     SPI.transfer(buf[2]);
   }
-  getBulbs();
+  getBulbs(bulbs);
+  RainInit();
   Serial.println("Starting fastLED");
   FastLED.addLeds<WS2801, 13, 14>(leds, NUM_LEDS);
-  Eye_target.location.r = 1;
-  Eye_target.location.y = 0.5;
-  Eye();
   FastLED.show();
 }
 int limit = 0;
+class Eye
+{
+public:
+  Bulb Eye_target;
+  Eye()
+  {
+    Eye_target.location.r = 1;
+    Eye_target.location.y = 0.8;
+  }
+  int Update()
+  {
+    Move();
+    Bulb *target = &Eye_target;
+    int closestIndex = -1;
+    uint minDist = UINT32_MAX;
+    for (int i = 0; i < NUM_LEDS; ++i)
+    {
+      float distance = MIN(1, getDistance(target->location, bulbs[i].location));
+      leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 100 - 120 * distance));
+    }
+    return minDist;
+  }
+
+private:
+  int counter = 0;
+  float yLoc = 0.0001;
+  void Move()
+  {
+    Eye_target.location.phi += 0.01;
+    // Eye_target.location.r += 0.001;
+    if (Eye_target.location.r > 1.2)
+    {
+      Eye_target.location.r = 0;
+    }
+    if (Eye_target.location.phi > 2 * M_PI)
+    {
+      Eye_target.location.phi -= 2 * M_PI;
+    }
+    uint8 theta = UINT8_MAX * Eye_target.location.phi / (2 * M_PI);
+    Eye_target.location.x = (cos8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
+    Eye_target.location.z = (sin8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
+  }
+};
+
+void VerticalRainbow()
+{
+  for (int i = 0; i < NUM_LEDS; ++i)
+  {
+    // uint8 hue = 127 * ((1 + bulbs[i].y) - yLoc);
+
+    // leds[i] = CHSV(hue, 255, 30);
+    // leds[i] = CHSV(i*4, 255, 30);
+    leds[i] = CHSV((255 * bulbs[i].location.phi) / (2 * M_PI), 255, 30);
+  }
+}
+
+Eye eye;
+#define N_RAINDROPS_MAX 10
+#define N_DROPBULBS_MAX 5
+struct WaterBulb;
+struct BulbBelow
+{
+  WaterBulb *bulb;
+  int index;
+  float distance;
+  int amount;
+};
+struct WaterBulb
+{
+  BulbBelow below[N_DROPBULBS_MAX];
+  int amount;
+};
+// struct Rain
+// {
+//   Raindrop drops[N_RAINDROPS_MAX];
+//   int count;
+// };
+// struct Rain rain;
+
+static WaterBulb waterBulbs[NUM_LEDS] = {0};
+
+void Rain()
+{
+  for (int i = 0; i < NUM_LEDS; ++i)
+  {
+    // Serial.println(i);
+    if (waterBulbs[i].amount > 0)
+    {
+          Serial.println(i);
+          Serial.println(waterBulbs[i].amount);
+      // leds[i] = CHSV(100, 255, 30);
+      for (int k = 0; k < N_DROPBULBS_MAX; ++k)
+      {
+        BulbBelow *below = &waterBulbs[i].below[k];
+        if (below->distance > 0)
+        {
+          // below->amount = Min(255, below->amount + 1);
+          below->bulb->amount = Min(255, below->bulb->amount + 1);
+          // leds[below->index] = CHSV(255 * below->distance, 255, 255);
+          Serial.println(below->index);
+          Serial.println(below->bulb->amount);
+        }
+      }
+      // waterBulbs[i].amount = Max(0, waterBulbs[i].amount - 1);
+    }
+          Serial.println();
+  }
+  for (int i = 0; i < NUM_LEDS; ++i)
+  {
+    leds[i] = CHSV(0, 255, waterBulbs[i].amount);
+  }
+}
+
+void RainInit()
+{
+  for (int i = 0; i < NUM_LEDS; ++i)
+  {
+    Bulb *closest[N_DROPBULBS_MAX];
+    if (bulbs[i].location.y < 0.1)
+    {
+      waterBulbs[i].amount = 255;
+    }
+    Serial.println(i);
+    for (int j = 0; j < NUM_LEDS; ++j)
+    {
+      if (i == j || bulbs[i].location.y < bulbs[j].location.y)
+        continue;
+      float distance = MIN(1, getDistance(bulbs[i].location, bulbs[j].location));
+      // Serial.println(distance);
+      for (int k = 0; k < N_DROPBULBS_MAX; ++k)
+      {
+        BulbBelow *below = &waterBulbs[i].below[k];
+        // Serial.println(below->distance);
+        if (below->distance == 0 || distance < below->distance)
+        {
+          if (distance < below->distance)
+          {
+            for (int l = N_DROPBULBS_MAX - 1; l > k; --l)
+            {
+              waterBulbs[i].below[l] = waterBulbs[i].below[l - 1];
+            }
+          }
+          below->bulb = &waterBulbs[j];
+          below->index = j;
+          below->distance = distance;
+          break;
+        }
+      }
+      // Serial.println(j);
+    }
+    Serial.println();
+  }
+  Rain();
+}
 void loop()
 {
   ArduinoOTA.handle();
 
-  Eye_target.location.phi += 0.01;
-  // Eye_target.location.r += 0.001;
-  if (Eye_target.location.r > 1.2)
-  {
-    Eye_target.location.r = 0;
-  }
-  if (Eye_target.location.phi > 2 * M_PI)
-  {
-    Eye_target.location.phi -= 2 * M_PI;
-  }
-  uint8 theta = UINT8_MAX * Eye_target.location.phi / (2 * M_PI);
-  Eye_target.location.x = (cos8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
-  Eye_target.location.z = (sin8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
-
-
-  Eye();
+  // eye.Update();
+  Rain();
   FastLED.show();
-  delay(10);
+  delay(1000);
 }
