@@ -17,14 +17,15 @@ uint8 ledIndexes[] = {34, 4, 38, 5, 20,
 float getDistance(Point p1, Point p2)
 {
   float sum = 0;
-  float *coord1 = &p1.x;
-  float *coord2 = &p2.x;
-  for (int axis = X; axis <= Z; ++axis)
-  {
-    sum += pow(Abs(*coord1 - *coord2), 2);
-    ++coord1;
-    ++coord2;
-  }
+  // float *coord1 = &p1.x;
+  // float *coord2 = &p2.x;
+  // for (int axis = X; axis <= Z; ++axis)
+  // {
+  //   sum += pow(Abs(*coord1 - *coord2), 2);
+  //   ++coord1;
+  //   ++coord2;
+  // }
+    sum = pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2) + pow(p1.z - p2.z, 2);
   float r = sqrt(sum);
   return r;
 }
@@ -42,18 +43,19 @@ void getBulbs(Bulb bulbs[NUM_LEDS])
     {
       phi -= 2 * M_PI;
     }
-    uint8 theta = UINT8_MAX * phi / (2 * M_PI);
+    uint16 theta = UINT16_MAX * phi / (2 * M_PI);
     bulbs[ledIndexes[i]] = {
         {
-            cos8(theta) / (float)UINT8_MAX * r,
+            0.5 + r * (cos16(theta) / (float)UINT16_MAX),
             (y + 1) / 2,
-            sin8(theta) / (float)UINT8_MAX * r,
+            0.5 + r * (sin16(theta) / (float)UINT16_MAX),
             r,
             phi,
         },
         ledIndexes[i]};
-    // Serial.println(bulbs[ledIndexes[i]].location.x);
-    // Serial.println(bulbs[ledIndexes[i]].location.y);
-    // Serial.println(bulbs[ledIndexes[i]].location.z);
+    Serial.println(bulbs[ledIndexes[i]].location.x);
+    Serial.println(bulbs[ledIndexes[i]].location.y);
+    Serial.println(bulbs[ledIndexes[i]].location.z);
+    Serial.println();
   }
 }

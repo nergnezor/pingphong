@@ -197,6 +197,7 @@ struct BulbBelow
 struct WaterBulb
 {
   BulbBelow below[N_DROPBULBS_MAX];
+  int belowCount;
   int amount;
 };
 // struct Rain
@@ -207,7 +208,7 @@ struct WaterBulb
 // struct Rain rain;
 
 static WaterBulb waterBulbs[NUM_LEDS] = {0};
-
+static float y = 0.01;
 void Rain()
 {
   for (int i = 0; i < NUM_LEDS; ++i)
@@ -215,47 +216,59 @@ void Rain()
     // Serial.println(i);
     if (waterBulbs[i].amount > 0)
     {
-          Serial.println(i);
-          Serial.println(waterBulbs[i].amount);
-      // leds[i] = CHSV(100, 255, 30);
+      // Serial.println(i);
+      // Serial.println(waterBulbs[i].amount);
+      // leds[i] = CHSV(100, 255, waterBulbs[i].amount);
       for (int k = 0; k < N_DROPBULBS_MAX; ++k)
       {
         BulbBelow *below = &waterBulbs[i].below[k];
         if (below->distance > 0)
         {
-          // below->amount = Min(255, below->amount + 1);
           below->bulb->amount = Min(255, below->bulb->amount + 1);
-          // leds[below->index] = CHSV(255 * below->distance, 255, 255);
-          Serial.println(below->index);
-          Serial.println(below->bulb->amount);
         }
+      waterBulbs[i].amount = Max(0, waterBulbs[i].amount - 1);
       }
-      // waterBulbs[i].amount = Max(0, waterBulbs[i].amount - 1);
+      // Serial.println();
     }
-          Serial.println();
   }
   for (int i = 0; i < NUM_LEDS; ++i)
   {
     leds[i] = CHSV(0, 255, waterBulbs[i].amount);
+    // if (bulbs[i].location.z < y)
+    // leds[i] = CHSV(0, 255, 255);
   }
+  y += 0.01;
 }
 
 void RainInit()
 {
-  for (int i = 0; i < NUM_LEDS; ++i)
+  for (int i = 0; i < NUM_LEDS; i++)
   {
-    Bulb *closest[N_DROPBULBS_MAX];
-    if (bulbs[i].location.y < 0.1)
+    // Bulb *closest[N_DROPBULBS_MAX];
+    // if (i == 38)
+    if (bulbs[i].location.y < 0.01)
     {
+      // Serial.println(i);
+      // Serial.println(bulbs[i].location.x);
+      // Serial.println(bulbs[i].location.y);
+      // Serial.println(bulbs[i].location.z);
+      // Serial.println();
+      // leds[i] = CHSV(200, 255, 255);
       waterBulbs[i].amount = 255;
     }
-    Serial.println(i);
-    for (int j = 0; j < NUM_LEDS; ++j)
+    for (int j = 0; j < NUM_LEDS; j++)
     {
-      if (i == j || bulbs[i].location.y < bulbs[j].location.y)
+      if (i == j || bulbs[j].location.y < bulbs[i].location.y)
         continue;
-      float distance = MIN(1, getDistance(bulbs[i].location, bulbs[j].location));
+      float distance = Min(1, getDistance(bulbs[i].location, bulbs[j].location));
+      // leds[j] = CHSV((int)(distance * 255), 255, 255 - (int)(distance * 255));
+
+      // Serial.println(j);
+      // Serial.println(bulbs[j].location.x);
+      // Serial.println(bulbs[j].location.y);
+      // Serial.println(bulbs[j].location.z);
       // Serial.println(distance);
+      // Serial.println();
       for (int k = 0; k < N_DROPBULBS_MAX; ++k)
       {
         BulbBelow *below = &waterBulbs[i].below[k];
@@ -275,7 +288,6 @@ void RainInit()
           break;
         }
       }
-      // Serial.println(j);
     }
     Serial.println();
   }
@@ -288,5 +300,5 @@ void loop()
   // eye.Update();
   Rain();
   FastLED.show();
-  delay(1000);
+  delay(50);
 }
