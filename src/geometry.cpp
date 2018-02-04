@@ -53,9 +53,9 @@ void getBulbs(Bulb bulbs[NUM_LEDS])
             phi,
         },
         ledIndexes[i]};
-    Serial.println(bulbs[ledIndexes[i]].location.x);
-    Serial.println(bulbs[ledIndexes[i]].location.y);
-    Serial.println(bulbs[ledIndexes[i]].location.z);
-    Serial.println();
+    // Serial.println(bulbs[ledIndexes[i]].location.x);
+    // Serial.println(bulbs[ledIndexes[i]].location.y);
+    // Serial.println(bulbs[ledIndexes[i]].location.z);
+    // Serial.println();
   }
 }
