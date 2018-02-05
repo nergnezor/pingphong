@@ -240,7 +240,7 @@ void Rain()
             break;
           float dy = bulbs[below->index].location.y - bulbs[i].location.y;
           // int leakage = dy * 20;
-          int leakage = dy*10 + below->distance/2;
+          int leakage = dy*20 + below->distance/1;
           // Serial.println(leakage);
           waterBulbs[below->index].amount = Min(255, waterBulbs[below->index].amount + leakage);
           waterBulbs[i].amount = Max(0, waterBulbs[i].amount - leakage);
@@ -255,7 +255,7 @@ void Rain()
   }
   for (int i = 0; i < NUM_LEDS; ++i)
   {
-    leds[i] = CHSV(140, 200, waterBulbs[i].amount);
+    leds[i] = CHSV(170 - waterBulbs[i].amount / 6, 200, waterBulbs[i].amount);
     // leds[i] = CHSV(waterBulbs[i].amount, 255, 255);
 
     // if (bulbs[i].location.z < y)
