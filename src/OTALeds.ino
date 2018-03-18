@@ -188,6 +188,13 @@ void VerticalRainbow()
 }
 
 Eye eye;
+DEFINE_GRADIENT_PALETTE(heatmap_gp){
+    0, 255, 255, 0,    //bright yellow
+    50, 255, 0, 0,      //red
+    70, 255, 255, 255,
+    
+     //full white
+    255, 150, 150, 255}; //full white
 
 class Sun
 {
@@ -195,25 +202,36 @@ public:
   Point location;
   Sun()
   {
-    location.r = 1;
-    location.y = 0.4;
+    location.x = 0.5;
+    location.y = 0;
+    location.z = 0.5;
   }
-  int Update()
+  void Update()
   {
-    Move();
-    int closestIndex = -1;
-    uint minDist = UINT32_MAX;
+    // Move();
+    // int closestIndex = -1;
+    // uint minDist = UINT32_MAX;
     for (int i = 0; i < NUM_LEDS; ++i)
     {
       float distance = MIN(1, getDistance(location, bulbs[i].location));
-      leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 255 - 120 * distance));
+      // leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 255 - 120 * distance));
+      CHSV color = CHSV(150, 150, 255);
+      if (distance < 0.3){
+        color.hue = 64;
+        color.saturation = 255;
+      }
+      leds[i] = color;
+      uint8_t heatindex = distance * 255;
+      leds[i] = ColorFromPalette(myPal, heatindex);
     }
-    return minDist;
+    // return minDist;
   }
 
 private:
   int counter = 0;
   float yLoc = 0.0001;
+
+  CRGBPalette16 myPal = heatmap_gp;
   void Move()
   {
     location.phi += 0.05;
@@ -339,7 +357,7 @@ void RainInit()
           break;
         }
       }
-      Serial.println(waterBulbs[i].belowCount);
+      // Serial.println(waterBulbs[i].belowCount);
     }
   }
   Rain();
@@ -356,9 +374,9 @@ void loop()
   // static float phi = 0.0f;
   // for (int i = 0; i < NUM_LEDS; ++i)
   // {
-  //   leds[i] = CHSV(255 * (bulbs[i].location.phi - phi)/(2*M_PI), 255, 50);
+  //   leds[i] = CHSV(255 * (bulbs[i].location.phi - phi)/(2*M_PI), 255, 255);
   // }
-  // phi += 0.01;
+  // phi += 0.1;
   // while (phi > 2 * M_PI)
   // {
   //   phi -= 2 * M_PI;
