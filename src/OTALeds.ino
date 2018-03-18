@@ -149,7 +149,7 @@ public:
     for (int i = 0; i < NUM_LEDS; ++i)
     {
       float distance = MIN(1, getDistance(target->location, bulbs[i].location));
-      leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 100 - 120 * distance));
+      leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 255 - 120 * distance));
     }
     return minDist;
   }
@@ -188,6 +188,50 @@ void VerticalRainbow()
 }
 
 Eye eye;
+
+class Sun
+{
+public:
+  Point location;
+  Sun()
+  {
+    location.r = 1;
+    location.y = 0.4;
+  }
+  int Update()
+  {
+    Move();
+    int closestIndex = -1;
+    uint minDist = UINT32_MAX;
+    for (int i = 0; i < NUM_LEDS; ++i)
+    {
+      float distance = MIN(1, getDistance(location, bulbs[i].location));
+      leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 255 - 120 * distance));
+    }
+    return minDist;
+  }
+
+private:
+  int counter = 0;
+  float yLoc = 0.0001;
+  void Move()
+  {
+    location.phi += 0.05;
+    // location.r += 0.001;
+    if (location.r > 1.2)
+    {
+      location.r = 0;
+    }
+    if (location.phi > 2 * M_PI)
+    {
+      location.phi -= 2 * M_PI;
+    }
+    uint8 theta = UINT8_MAX * location.phi / (2 * M_PI);
+    location.x = (cos8(theta) / (float)UINT8_MAX) * location.r;
+    location.z = (sin8(theta) / (float)UINT8_MAX) * location.r;
+  }
+};
+
 #define N_RAINDROPS_MAX 10
 #define N_DROPBULBS_MAX 10
 struct WaterBulb;
@@ -213,7 +257,6 @@ struct WaterBulb
 // struct Rain rain;
 
 static WaterBulb waterBulbs[NUM_LEDS] = {0};
-static float y = 0.01;
 void Rain()
 {
   for (int i = 0; i < NUM_LEDS; ++i)
@@ -241,6 +284,7 @@ void Rain()
           float dy = bulbs[below->index].location.y - bulbs[i].location.y;
           // int leakage = dy * 20;
           int leakage = dy*20 + below->distance/1;
+          leakage *= 4;
           // Serial.println(leakage);
           waterBulbs[below->index].amount = Min(255, waterBulbs[below->index].amount + leakage);
           waterBulbs[i].amount = Max(0, waterBulbs[i].amount - leakage);
@@ -255,13 +299,8 @@ void Rain()
   }
   for (int i = 0; i < NUM_LEDS; ++i)
   {
-    leds[i] = CHSV(170 - waterBulbs[i].amount / 6, 200, waterBulbs[i].amount);
-    // leds[i] = CHSV(waterBulbs[i].amount, 255, 255);
-
-    // if (bulbs[i].location.z < y)
-    // leds[i] = CHSV(0, 255, 255);
+    leds[i] = CHSV(150 - waterBulbs[i].amount / 20, 200, waterBulbs[i].amount);
   }
-  y += 0.01;
 }
 
 void RainInit()
@@ -305,16 +344,25 @@ void RainInit()
   }
   Rain();
 }
+
+Sun sun;
 void loop()
 {
   ArduinoOTA.handle();
 
   // eye.Update();
-  Rain();
-  //   for (int i = 0; i < NUM_LEDS; ++i)
+  sun.Update();
+  // Rain();
+  // static float phi = 0.0f;
+  // for (int i = 0; i < NUM_LEDS; ++i)
   // {
-  //   leds[i] = CHSV(255-bulbs[i].location.z * 127, 255, 255);
+  //   leds[i] = CHSV(255 * (bulbs[i].location.phi - phi)/(2*M_PI), 255, 50);
+  // }
+  // phi += 0.01;
+  // while (phi > 2 * M_PI)
+  // {
+  //   phi -= 2 * M_PI;
   // }
   FastLED.show();
-  delay(10);
+  delay(30);
 }
