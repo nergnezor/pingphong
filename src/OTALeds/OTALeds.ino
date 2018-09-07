@@ -1,44 +1,26 @@
-// #include <bitswap.h>
-// #include <chipsets.h>
-// #include <color.h>
-// #include <colorpalettes.h>
-// #include <colorutils.h>
-// #include <controller.h>
-// #include <cpp_compat.h>
-// #include <dmx.h>
-// #include <FastLED.h>
-// #include <fastled_config.h>
-// #include <fastled_delay.h>
-// #include <fastled_progmem.h>
-// #include <fastpin.h>
-// #include <fastspi.h>
-// #include <fastspi_bitbang.h>
-// #include <fastspi_dma.h>
-// #include <fastspi_nop.h>
-// #include <fastspi_ref.h>
-// #include <fastspi_types.h>
-// #include <hsv2rgb.h>
-// #include <led_sysdefs.h>
-// #include <lib8tion.h>
-// #include <noise.h>
-// #include <pixelset.h>
-// #include <pixeltypes.h>
-// #include <platforms.h>
-// #include <power_mgt.h>
-
+#include <ArduinoJson.h>
+#include <ArduinoOTA.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
+#include <SPI.h>  //SPI
 #include <WiFiUdp.h>
-#include <ArduinoOTA.h>
-#include <ArduinoJson.h>
 #include <math.h>
-#include <SPI.h> //SPI
 #define FASTLED_ESP8266_RAW_PIN_ORDER
 // #define FASTLED_ESP8266_NODEMCU_PIN_ORDER
 // #define FASTLED_ESP8266_D1_PIN_ORDER
 #include "FastLED.h"
 
 #include "geometry.h"
+// open weather map api key
+String apiKey = "7067e6fe9d7d2c44fcb05d94ec932a98";
+
+// the city you want the weather for
+String location = "stockholm,SE";
+
+int status = WL_IDLE_STATUS;
+char server[] = "api.openweathermap.org";
+
+WiFiClient client;
 
 CRGB leds[NUM_LEDS];
 Bulb bulbs[NUM_LEDS];
@@ -55,13 +37,79 @@ IPAddress subnet(255, 255, 255, 0);
 int led_pin = ESP8266_LED;
 #define N_DIMMERS 0
 int dimmer_pin[] = {14, 5, 15};
-void setup()
-{
+
+void getWeather() {
+  client.stop();
+  Serial.println("\nStarting connection to server...");
+  // if you get a connection, report back via serial:
+  if (client.connect(server, 80)) {
+    Serial.println("connected to server");
+    // Make a HTTP request:
+    client.print("GET /data/2.5/forecast?");
+    client.print("q=" + location);
+    client.print("&cnt=3");
+    client.print("&appid=" + apiKey);
+    client.println("&units=metric");
+    client.println("Host: api.openweathermap.org");
+    client.println("Connection: close");
+    client.println();
+  } else {
+    Serial.println("unable to connect");
+  }
+
+  delay(1000);
+  String line = "";
+
+  while (client.available()) {
+    Serial.println("parsingValues");
+    line = client.readStringUntil('\n');
+
+    // Serial.println(line);
+
+    // create a json buffer where to store the json data
+    // StaticJsonBuffer<5000> jsonBuffer;
+    DynamicJsonBuffer jsonBuffer;
+
+    JsonObject &root = jsonBuffer.parseObject(line);
+    if (!root.success()) {
+      Serial.println("parseObject() failed");
+      return;
+    }
+
+    for (int i = 0; i < 3; ++i) {
+      float temp = root["list"][i]["main"]["temp"];
+      String nextWeatherTime = root["list"][i]["dt_txt"];
+      String nextWeather = root["list"][i]["weather"][0]["main"];
+      Serial.println(temp);
+      Serial.println(nextWeatherTime);
+      Serial.println(nextWeather);
+    }
+    // // get the data from the json tree
+    // String nextWeatherTime0 = root["list"][0]["dt_txt"];
+    // String nextWeather0 = root["list"][0]["weather"][0]["main"];
+
+    // String nextWeatherTime1 = root["list"][1]["dt_txt"];
+    // String nextWeather1 = root["list"][1]["weather"][0]["main"];
+
+    // String nextWeatherTime2 = root["list"][2]["dt_txt"];
+    // String nextWeather2 = root["list"][2]["weather"][0]["main"];
+    // float temp = root["list"][0]["main"]["temp"];
+
+    // // Print values.
+    // Serial.println(nextWeatherTime0);
+    // Serial.println(nextWeather0);
+    // Serial.println(nextWeatherTime1);
+    // Serial.println(nextWeather1);
+    // Serial.println(nextWeatherTime2);
+    // Serial.println(nextWeather2);
+  }
+}
+
+void setup() {
   Serial.begin(115200);
 
-  for (int i = 0; i < 50; ++i)
-  {
-    SPI.transfer(10);
+  for (int i = 0; i < 50; ++i) {
+    SPI.transfer(1);
     SPI.transfer(0);
     SPI.transfer(0);
   }
@@ -72,11 +120,10 @@ void setup()
   Serial.println("Booting");
   WiFi.mode(WIFI_STA);
   WiFi.hostname(host);
-  WiFi.config(ip, gateway, subnet);
+  // WiFi.config(ip, gateway, subnet);
   WiFi.begin(ssid, password);
 
-  while (WiFi.waitForConnectResult() != WL_CONNECTED)
-  {
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     WiFi.begin(ssid, password);
     Serial.println("Retrying connection...");
   }
@@ -87,22 +134,19 @@ void setup()
   analogWriteRange(1000);
   analogWrite(led_pin, 990);
 
-  for (int i = 0; i < N_DIMMERS; i++)
-  {
+  for (int i = 0; i < N_DIMMERS; i++) {
     pinMode(dimmer_pin[i], OUTPUT);
     analogWrite(dimmer_pin[i], 50);
   }
 
   ArduinoOTA.setHostname(host);
-  ArduinoOTA.onStart([]() { // switch off all the PWMs during upgrade
-    for (int i = 0; i < N_DIMMERS; i++)
-      analogWrite(dimmer_pin[i], 0);
+  ArduinoOTA.onStart([]() {  // switch off all the PWMs during upgrade
+    for (int i = 0; i < N_DIMMERS; i++) analogWrite(dimmer_pin[i], 0);
     analogWrite(led_pin, 0);
   });
 
-  ArduinoOTA.onEnd([]() { // do a fancy thing with our board led at end
-    for (int i = 0; i < 30; i++)
-    {
+  ArduinoOTA.onEnd([]() {  // do a fancy thing with our board led at end
+    for (int i = 0; i < 30; i++) {
       analogWrite(led_pin, (i * 100) % 1001);
       delay(50);
     }
@@ -118,8 +162,7 @@ void setup()
   SPI.begin();
   uint8_t buf[] = {255, 20, 0};
 
-  for (int i = 0; i < 50; ++i)
-  {
+  for (int i = 0; i < 50; ++i) {
     SPI.transfer(buf[0]);
     SPI.transfer(buf[1]);
     SPI.transfer(buf[2]);
@@ -128,57 +171,54 @@ void setup()
   RainInit();
   Serial.println("Starting fastLED");
   FastLED.addLeds<WS2801, 13, 14>(leds, NUM_LEDS);
-  FastLED.show();
+  getWeather();
+  // delay(1000);
+  // FastLED.show();
 }
+
 int limit = 0;
-class Eye
-{
-public:
+class Eye {
+ public:
   Bulb Eye_target;
-  Eye()
-  {
+  Eye() {
     Eye_target.location.r = 1;
     Eye_target.location.y = 0.8;
   }
-  int Update()
-  {
+  int Update() {
     Move();
     Bulb *target = &Eye_target;
     int closestIndex = -1;
     uint minDist = UINT32_MAX;
-    for (int i = 0; i < NUM_LEDS; ++i)
-    {
+    for (int i = 0; i < NUM_LEDS; ++i) {
       float distance = MIN(1, getDistance(target->location, bulbs[i].location));
-      leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 255 - 120 * distance));
+      leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance,
+                     Max(0, 255 - 120 * distance));
     }
     return minDist;
   }
 
-private:
+ private:
   int counter = 0;
   float yLoc = 0.0001;
-  void Move()
-  {
+  void Move() {
     Eye_target.location.phi += 0.01;
     // Eye_target.location.r += 0.001;
-    if (Eye_target.location.r > 1.2)
-    {
+    if (Eye_target.location.r > 1.2) {
       Eye_target.location.r = 0;
     }
-    if (Eye_target.location.phi > 2 * M_PI)
-    {
+    if (Eye_target.location.phi > 2 * M_PI) {
       Eye_target.location.phi -= 2 * M_PI;
     }
     uint8 theta = UINT8_MAX * Eye_target.location.phi / (2 * M_PI);
-    Eye_target.location.x = (cos8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
-    Eye_target.location.z = (sin8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
+    Eye_target.location.x =
+        (cos8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
+    Eye_target.location.z =
+        (sin8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
   }
 };
 
-void VerticalRainbow()
-{
-  for (int i = 0; i < NUM_LEDS; ++i)
-  {
+void VerticalRainbow() {
+  for (int i = 0; i < NUM_LEDS; ++i) {
     // uint8 hue = 127 * ((1 + bulbs[i].y) - yLoc);
 
     // leds[i] = CHSV(hue, 255, 30);
@@ -188,35 +228,31 @@ void VerticalRainbow()
 }
 
 Eye eye;
-DEFINE_GRADIENT_PALETTE(heatmap_gp){
-    0, 255, 255, 0,    //bright yellow
-    50, 255, 0, 0,      //red
-    70, 255, 255, 255,
-    
-     //full white
-    255, 150, 150, 255}; //full white
+DEFINE_GRADIENT_PALETTE(heatmap_gp){0, 255, 255, 0,  // bright yellow
+                                    50, 255, 0, 0,   // red
+                                    70, 255, 255, 255,
 
-class Sun
-{
-public:
+                                    // full white
+                                    255, 150, 150, 255};  // full white
+
+class Sun {
+ public:
   Point location;
-  Sun()
-  {
+  Sun() {
     location.x = 0.5;
     location.y = 0;
     location.z = 0.5;
   }
-  void Update()
-  {
+  void Update() {
     // Move();
     // int closestIndex = -1;
     // uint minDist = UINT32_MAX;
-    for (int i = 0; i < NUM_LEDS; ++i)
-    {
+    for (int i = 0; i < NUM_LEDS; ++i) {
       float distance = MIN(1, getDistance(location, bulbs[i].location));
-      // leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 255 - 120 * distance));
+      // leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 255 -
+      // 120 * distance));
       CHSV color = CHSV(150, 150, 255);
-      if (distance < 0.3){
+      if (distance < 0.3) {
         color.hue = 64;
         color.saturation = 255;
       }
@@ -227,21 +263,18 @@ public:
     // return minDist;
   }
 
-private:
+ private:
   int counter = 0;
   float yLoc = 0.0001;
 
   CRGBPalette16 myPal = heatmap_gp;
-  void Move()
-  {
+  void Move() {
     location.phi += 0.05;
     // location.r += 0.001;
-    if (location.r > 1.2)
-    {
+    if (location.r > 1.2) {
       location.r = 0;
     }
-    if (location.phi > 2 * M_PI)
-    {
+    if (location.phi > 2 * M_PI) {
       location.phi -= 2 * M_PI;
     }
     uint8 theta = UINT8_MAX * location.phi / (2 * M_PI);
@@ -253,15 +286,13 @@ private:
 #define N_RAINDROPS_MAX 10
 #define N_DROPBULBS_MAX 10
 struct WaterBulb;
-struct BulbBelow
-{
+struct BulbBelow {
   WaterBulb *bulb;
   int index;
   float distance;
   int amount;
 };
-struct WaterBulb
-{
+struct WaterBulb {
   BulbBelow below[N_DROPBULBS_MAX];
   int belowCount;
   int amount;
@@ -275,78 +306,60 @@ struct WaterBulb
 // struct Rain rain;
 
 static WaterBulb waterBulbs[NUM_LEDS] = {0};
-void Rain()
-{
-  for (int i = 0; i < NUM_LEDS; ++i)
-  {
-    if (bulbs[i].location.y < 0.01)
-    {
+void Rain() {
+  for (int i = 0; i < NUM_LEDS; ++i) {
+    if (bulbs[i].location.y < 0.01) {
       // if (waterBulbs[i].amount == 0)
-        waterBulbs[i].amount = 100;
+      waterBulbs[i].amount = 100;
       // waterBulbs[i].amount = Min(255, waterBulbs[i].amount + 1);
       waterBulbs[i].wasFull = true;
     }
-    if (waterBulbs[i].amount > 0)
-    {
-      if (waterBulbs[i].amount >= 255)
-      {
+    if (waterBulbs[i].amount > 0) {
+      if (waterBulbs[i].amount >= 255) {
         waterBulbs[i].wasFull = true;
       }
-      if (waterBulbs[i].wasFull)
-      {
-        for (int k = 0; k < waterBulbs[i].belowCount; ++k)
-        {
+      if (waterBulbs[i].wasFull) {
+        for (int k = 0; k < waterBulbs[i].belowCount; ++k) {
           BulbBelow *below = &waterBulbs[i].below[k];
-          if (below == 0)
-            break;
+          if (below == 0) break;
           float dy = bulbs[below->index].location.y - bulbs[i].location.y;
           // int leakage = dy * 20;
-          int leakage = dy*20 + below->distance/1;
+          int leakage = dy * 20 + below->distance / 1;
           leakage *= 4;
           // Serial.println(leakage);
-          waterBulbs[below->index].amount = Min(255, waterBulbs[below->index].amount + leakage);
+          waterBulbs[below->index].amount =
+              Min(255, waterBulbs[below->index].amount + leakage);
           waterBulbs[i].amount = Max(0, waterBulbs[i].amount - leakage);
         }
-        if (waterBulbs[i].amount <= 0)
-        {
+        if (waterBulbs[i].amount <= 0) {
           waterBulbs[i].wasFull = false;
           waterBulbs[i].amount = 0;
         }
       }
     }
   }
-  for (int i = 0; i < NUM_LEDS; ++i)
-  {
+  for (int i = 0; i < NUM_LEDS; ++i) {
     leds[i] = CHSV(150 - waterBulbs[i].amount / 20, 200, waterBulbs[i].amount);
   }
 }
 
-void RainInit()
-{
-  for (int i = 0; i < NUM_LEDS; i++)
-  {
-    if (bulbs[i].location.y < 0.01)
-    {
+void RainInit() {
+  for (int i = 0; i < NUM_LEDS; i++) {
+    if (bulbs[i].location.y < 0.01) {
       waterBulbs[i].amount = 255;
       waterBulbs[i].wasFull = true;
     }
-    for (int j = 0; j < NUM_LEDS; j++)
-    {
-      if (i == j || bulbs[j].location.y < bulbs[i].location.y)
-        continue;
-      float distance = Min(1, getDistance(bulbs[i].location, bulbs[j].location));
+    for (int j = 0; j < NUM_LEDS; j++) {
+      if (i == j || bulbs[j].location.y < bulbs[i].location.y) continue;
+      float distance =
+          Min(1, getDistance(bulbs[i].location, bulbs[j].location));
       // Serial.println(distance);
-      if (distance > 0.5)
-        continue;
-      for (int k = 0; k < N_DROPBULBS_MAX; ++k)
-      {
+      if (distance > 0.5) continue;
+      for (int k = 0; k < N_DROPBULBS_MAX; ++k) {
         BulbBelow *below = &waterBulbs[i].below[k];
-        if (k >= waterBulbs[i].belowCount || distance < below->distance)
-        {
-          if (distance < below->distance)
-          {
-            for (int l = N_DROPBULBS_MAX - 1; l > k; --l)
-            {
+        if (k >= waterBulbs[i].belowCount || distance < below->distance) {
+          if (distance < below->distance) {
+            for (int l = N_DROPBULBS_MAX - 1; l > k; --l) {
               waterBulbs[i].below[l] = waterBulbs[i].below[l - 1];
             }
           }
@@ -364,13 +377,12 @@ void RainInit()
 }
 
 Sun sun;
-void loop()
-{
+void loop() {
   ArduinoOTA.handle();
 
   // eye.Update();
-  sun.Update();
-  // Rain();
+  // sun.Update();
+  Rain();
   // static float phi = 0.0f;
   // for (int i = 0; i < NUM_LEDS; ++i)
   // {

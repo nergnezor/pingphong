@@ -16,16 +16,7 @@ uint8 ledIndexes[] = {34, 4, 38, 5, 20,
 
 float getDistance(Point p1, Point p2)
 {
-  float sum = 0;
-  // float *coord1 = &p1.x;
-  // float *coord2 = &p2.x;
-  // for (int axis = X; axis <= Z; ++axis)
-  // {
-  //   sum += pow(Abs(*coord1 - *coord2), 2);
-  //   ++coord1;
-  //   ++coord2;
-  // }
-    sum = pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2) + pow(p1.z - p2.z, 2);
+  float sum = pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2) + pow(p1.z - p2.z, 2);
   float r = sqrt(sum);
   return r;
 }
