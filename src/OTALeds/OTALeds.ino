@@ -176,91 +176,29 @@ void setup() {
   // FastLED.show();
 }
 
-int limit = 0;
-class Eye {
- public:
-  Bulb Eye_target;
-  Eye() {
-    Eye_target.location.r = 1;
-    Eye_target.location.y = 0.8;
-  }
-  int Update() {
-    Move();
-    Bulb *target = &Eye_target;
-    int closestIndex = -1;
-    uint minDist = UINT32_MAX;
-    for (int i = 0; i < NUM_LEDS; ++i) {
-      float distance = MIN(1, getDistance(target->location, bulbs[i].location));
-      leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance,
-                     Max(0, 255 - 120 * distance));
-    }
-    return minDist;
-  }
-
- private:
-  int counter = 0;
-  float yLoc = 0.0001;
-  void Move() {
-    Eye_target.location.phi += 0.01;
-    // Eye_target.location.r += 0.001;
-    if (Eye_target.location.r > 1.2) {
-      Eye_target.location.r = 0;
-    }
-    if (Eye_target.location.phi > 2 * M_PI) {
-      Eye_target.location.phi -= 2 * M_PI;
-    }
-    uint8 theta = UINT8_MAX * Eye_target.location.phi / (2 * M_PI);
-    Eye_target.location.x =
-        (cos8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
-    Eye_target.location.z =
-        (sin8(theta) / (float)UINT8_MAX) * Eye_target.location.r;
-  }
+DEFINE_GRADIENT_PALETTE(heatmap_gp){
+    0, 255, 200, 100,  //
+    60, 0, 0, 100,     //
+    130, 200, 50, 0,   //
+    // 100, 20, 80, 255, //
+    255, 100, 0, 0,  //
 };
-
-void VerticalRainbow() {
-  for (int i = 0; i < NUM_LEDS; ++i) {
-    // uint8 hue = 127 * ((1 + bulbs[i].y) - yLoc);
-
-    // leds[i] = CHSV(hue, 255, 30);
-    // leds[i] = CHSV(i*4, 255, 30);
-    leds[i] = CHSV((255 * bulbs[i].location.phi) / (2 * M_PI), 255, 30);
-  }
-}
-
-Eye eye;
-DEFINE_GRADIENT_PALETTE(heatmap_gp){0, 255, 255, 0,  // bright yellow
-                                    50, 255, 0, 0,   // red
-                                    70, 255, 255, 255,
-
-                                    // full white
-                                    255, 150, 150, 255};  // full white
 
 class Sun {
  public:
   Point location;
   Sun() {
     location.x = 0.5;
-    location.y = 0;
     location.z = 0.5;
+    location.r = 1;
   }
   void Update() {
-    // Move();
-    // int closestIndex = -1;
-    // uint minDist = UINT32_MAX;
+    Move();
     for (int i = 0; i < NUM_LEDS; ++i) {
-      float distance = MIN(1, getDistance(location, bulbs[i].location));
-      // leds[i] = CHSV(30 + 100 * distance, 255 - 150 * distance, Max(0, 255 -
-      // 120 * distance));
-      CHSV color = CHSV(150, 150, 255);
-      if (distance < 0.3) {
-        color.hue = 64;
-        color.saturation = 255;
-      }
-      leds[i] = color;
+      float distance = getDistance(location, bulbs[i].location) / 1.3;
       uint8_t heatindex = distance * 255;
       leds[i] = ColorFromPalette(myPal, heatindex);
     }
-    // return minDist;
   }
 
  private:
@@ -269,15 +207,12 @@ class Sun {
 
   CRGBPalette16 myPal = heatmap_gp;
   void Move() {
-    location.phi += 0.05;
-    // location.r += 0.001;
-    if (location.r > 1.2) {
-      location.r = 0;
+    location.y += -0.006;
+    location.phi += -0.05;
+    if (location.phi > 2 * PI) {
+      location.phi -= 2 * PI;
     }
-    if (location.phi > 2 * M_PI) {
-      location.phi -= 2 * M_PI;
-    }
-    uint8 theta = UINT8_MAX * location.phi / (2 * M_PI);
+    uint8 theta = UINT8_MAX * location.phi / (2 * PI);
     location.x = (cos8(theta) / (float)UINT8_MAX) * location.r;
     location.z = (sin8(theta) / (float)UINT8_MAX) * location.r;
   }
@@ -381,17 +316,17 @@ void loop() {
   ArduinoOTA.handle();
 
   // eye.Update();
-  // sun.Update();
-  Rain();
+  sun.Update();
+  // Rain();
   // static float phi = 0.0f;
   // for (int i = 0; i < NUM_LEDS; ++i)
   // {
-  //   leds[i] = CHSV(255 * (bulbs[i].location.phi - phi)/(2*M_PI), 255, 255);
+  //   leds[i] = CHSV(255 * (bulbs[i].location.phi - phi)/(2*PI), 255, 255);
   // }
   // phi += 0.1;
-  // while (phi > 2 * M_PI)
+  // while (phi > 2 * PI)
   // {
-  //   phi -= 2 * M_PI;
+  //   phi -= 2 * PI;
   // }
   FastLED.show();
   delay(30);
