@@ -5,12 +5,18 @@
 #include <SPI.h>  //SPI
 #include <WiFiUdp.h>
 #include <math.h>
+
 #define FASTLED_ESP8266_RAW_PIN_ORDER
 // #define FASTLED_ESP8266_NODEMCU_PIN_ORDER
 // #define FASTLED_ESP8266_D1_PIN_ORDER
+#include <PubSubClient.h>
 #include "FastLED.h"
-
 #include "geometry.h"
+
+#define mqtt_server "hassio"
+#define mqtt_user "DVES_USER"
+#define mqtt_password "DVES_PASS"
+
 // open weather map api key
 String apiKey = "7067e6fe9d7d2c44fcb05d94ec932a98";
 
@@ -20,15 +26,18 @@ String location = "stockholm,SE";
 int status = WL_IDLE_STATUS;
 char server[] = "api.openweathermap.org";
 
-WiFiClient client;
-
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
+String switch1;
+String strTopic;
+String strPayload;
 CRGB leds[NUM_LEDS];
 Bulb bulbs[NUM_LEDS];
 
 #define CS 15
 #define ESP8266_LED 2
-const char *ssid = "jazik";
-const char *password = "R0j4rr4lf";
+const char *ssid = "💀";
+const char *password = "";
 const char *host = "OTA-LEDS";
 IPAddress ip(192, 168, 0, 201);
 IPAddress gateway(192, 168, 0, 1);
@@ -39,20 +48,20 @@ int led_pin = ESP8266_LED;
 int dimmer_pin[] = {14, 5, 15};
 
 void getWeather() {
-  client.stop();
+  wifiClient.stop();
   Serial.println("\nStarting connection to server...");
   // if you get a connection, report back via serial:
-  if (client.connect(server, 80)) {
+  if (wifiClient.connect(server, 80)) {
     Serial.println("connected to server");
     // Make a HTTP request:
-    client.print("GET /data/2.5/forecast?");
-    client.print("q=" + location);
-    client.print("&cnt=3");
-    client.print("&appid=" + apiKey);
-    client.println("&units=metric");
-    client.println("Host: api.openweathermap.org");
-    client.println("Connection: close");
-    client.println();
+    wifiClient.print("GET /data/2.5/forecast?");
+    wifiClient.print("q=" + location);
+    wifiClient.print("&cnt=3");
+    wifiClient.print("&appid=" + apiKey);
+    wifiClient.println("&units=metric");
+    wifiClient.println("Host: api.openweathermap.org");
+    wifiClient.println("Connection: close");
+    wifiClient.println();
   } else {
     Serial.println("unable to connect");
   }
@@ -60,9 +69,9 @@ void getWeather() {
   delay(1000);
   String line = "";
 
-  while (client.available()) {
+  while (wifiClient.available()) {
     Serial.println("parsingValues");
-    line = client.readStringUntil('\n');
+    line = wifiClient.readStringUntil('\n');
 
     // Serial.println(line);
 
@@ -84,27 +93,24 @@ void getWeather() {
       Serial.println(nextWeatherTime);
       Serial.println(nextWeather);
     }
-    // // get the data from the json tree
-    // String nextWeatherTime0 = root["list"][0]["dt_txt"];
-    // String nextWeather0 = root["list"][0]["weather"][0]["main"];
-
-    // String nextWeatherTime1 = root["list"][1]["dt_txt"];
-    // String nextWeather1 = root["list"][1]["weather"][0]["main"];
-
-    // String nextWeatherTime2 = root["list"][2]["dt_txt"];
-    // String nextWeather2 = root["list"][2]["weather"][0]["main"];
-    // float temp = root["list"][0]["main"]["temp"];
-
-    // // Print values.
-    // Serial.println(nextWeatherTime0);
-    // Serial.println(nextWeather0);
-    // Serial.println(nextWeatherTime1);
-    // Serial.println(nextWeather1);
-    // Serial.println(nextWeatherTime2);
-    // Serial.println(nextWeather2);
   }
 }
 
+static byte light = 255;
+static bool active = true;
+void callback(char *topic, byte *payload, unsigned int length) {
+  payload[length] = '\0';
+  Serial.println(String((char *)topic));
+  Serial.println(String((char *)payload));
+  strTopic = String((char *)topic);
+  if (strTopic == "pingphong/brightness/set") {
+    light = String((char *)payload).toInt();
+    Serial.println(light);
+  } else if (strTopic == "pingphong/light/switch") {
+    active = String((char *)payload) == "ON";
+    mqttClient.publish("pingphong/light/status", active ? "ON" : "OFF");
+  }
+}
 void setup() {
   Serial.begin(115200);
 
@@ -159,6 +165,9 @@ void setup() {
   Serial.println("Ready");
   IPAddress ip = WiFi.localIP();
   Serial.println(ip.toString());
+  mqttClient.setServer(mqtt_server, 1883);
+  mqttClient.setCallback(callback);
+
   SPI.begin();
   uint8_t buf[] = {255, 20, 0};
 
@@ -177,11 +186,17 @@ void setup() {
 }
 
 DEFINE_GRADIENT_PALETTE(heatmap_gp){
-    0, 255, 200, 100,  //
-    60, 0, 0, 100,     //
-    130, 200, 50, 0,   //
-    // 100, 20, 80, 255, //
-    255, 100, 0, 0,  //
+    0,   255, 200, 100,  //
+    40,  0,   0,   100,  //
+    120, 200, 50,  0,    //
+    255, 100, 0,   0,    //
+                         // 255, 0,   0,   0,    //
+};
+DEFINE_GRADIENT_PALETTE(rio_gp){
+    0,   0,   255, 0,    // green
+    60,  0,   0,   255,  // blue
+    130, 128, 0,   255,  // purple
+    255, 255, 0,   200,  // pink
 };
 
 class Sun {
@@ -202,12 +217,9 @@ class Sun {
   }
 
  private:
-  int counter = 0;
-  float yLoc = 0.0001;
-
   CRGBPalette16 myPal = heatmap_gp;
   void Move() {
-    location.y += -0.006;
+    location.y += -0.005;
     location.phi += -0.05;
     if (location.phi > 2 * PI) {
       location.phi -= 2 * PI;
@@ -312,16 +324,53 @@ void RainInit() {
 }
 
 Sun sun;
-void loop() {
-  ArduinoOTA.handle();
+void reconnect() {
+  // Loop until we're reconnected
+  while (!mqttClient.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    // If you do not want to use a username and password, change next line to
+    // if (mqttClient.connect("ESP8266Client")) {
+    if (mqttClient.connect("ESP8266Client", mqtt_user, mqtt_password)) {
+      Serial.println("connected");
+      // Publish a message to the status topic
+      mqttClient.publish("pingphong/light/status", "ON");
 
+      // Listen for messages on the control topic
+      mqttClient.subscribe("pingphong/light/switch");
+      mqttClient.subscribe("pingphong/brightness/set");
+      mqttClient.subscribe("pingphong/effect/set");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(mqttClient.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+void loop() {
+  if (!mqttClient.connected()) {
+    reconnect();
+  }
+  mqttClient.loop();
   // eye.Update();
   sun.Update();
   // Rain();
   // static float phi = 0.0f;
-  // for (int i = 0; i < NUM_LEDS; ++i)
-  // {
-  //   leds[i] = CHSV(255 * (bulbs[i].location.phi - phi)/(2*PI), 255, 255);
+  for (int i = 0; i < NUM_LEDS; ++i) {
+    auto hsv = rgb2hsv_approximate(leds[i]);
+    hsv.v = min(hsv.v, light);
+    if (!active) hsv.v = 0;
+    leds[i] = CRGB(hsv);
+  }
+
+  // for (CRGB rgb : leds) {
+  //   auto hsv = rgb2hsv_approximate(rgb);
+  //   hsv.v = min(hsv.v, light);
+
+  //   rgb = CRGB(hsv);
   // }
   // phi += 0.1;
   // while (phi > 2 * PI)
@@ -329,5 +378,6 @@ void loop() {
   //   phi -= 2 * PI;
   // }
   FastLED.show();
-  delay(30);
+  delay(10);
+  ArduinoOTA.handle();
 }
