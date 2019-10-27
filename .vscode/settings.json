@@ -35,6 +35,9 @@
         "slist": "cpp",
         "fstream": "cpp",
         "atomic": "cpp",
-        "list": "cpp"
-    }
+        "list": "cpp",
+        "cstddef": "cpp"
+    },
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "editor.formatOnPaste": true
 }
